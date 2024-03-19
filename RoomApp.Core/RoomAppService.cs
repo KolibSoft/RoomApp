@@ -48,6 +48,7 @@ namespace KolibSoft.RoomApp.Core
             if (Socket == socket)
             {
                 Status = RoomAppStatus.Online;
+                Connections = Connections.Clear();
                 StatusChanged?.Invoke(this, RoomAppStatus.Online);
             }
         }
@@ -94,6 +95,7 @@ namespace KolibSoft.RoomApp.Core
             if (Socket == socket)
             {
                 Status = RoomAppStatus.Offline;
+                Connections = Connections.Clear();
                 StatusChanged?.Invoke(this, RoomAppStatus.Offline);
             }
         }
