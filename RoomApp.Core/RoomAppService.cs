@@ -13,26 +13,31 @@ namespace KolibSoft.RoomApp.Core
 
         public RoomAppManifest Manifest { get; set; }
         public string[] Capabilities { get; set; }
-        public RoomAppBehavior Behavior { get; set; } = RoomAppBehavior.Default;
+        public RoomAppBehavior Behavior { get; set; } = RoomAppBehavior.DiscoverFirst;
         public ImmutableArray<RoomAppConnection> Connections { get; private set; } = ImmutableArray.Create<RoomAppConnection>();
 
         public event EventHandler<RoomAppConnection>? ConnectionChanged;
 
         public async Task AnnounceApp(RoomChannel? channel = null)
         {
-            var json = JsonSerializer.Serialize(Manifest);
+            var json = JsonSerializer.Serialize(new RoomAppAnnouncementMessage
+            {
+                Manifest = Manifest
+            });
             await SendAsync(new RoomMessage
             {
                 Verb = RoomAppVerbs.AppAnnouncement,
                 Channel = channel ?? RoomChannel.Broadcast,
                 Content = RoomContent.Parse(json)
             });
-            await Task.Delay(100);
         }
 
         public async Task DiscoverApp(RoomChannel? channel = null)
         {
-            var json = JsonSerializer.Serialize(Capabilities);
+            var json = JsonSerializer.Serialize(new RoomAppDiscoveringMessage
+            {
+                Capabilities = Capabilities
+            });
             await SendAsync(new RoomMessage
             {
                 Verb = RoomAppVerbs.AppDiscovering,
@@ -53,24 +58,28 @@ namespace KolibSoft.RoomApp.Core
             base.OnMessageReceived(message);
             try
             {
-                if (message.Verb == RoomAppVerbs.AppAnnouncement)
+                if (message.Verb == RoomAppVerbs.AppAnnouncement && message.Content.Length > 0)
                 {
+                    var connection = Connections.FirstOrDefault(x => x.Channel == message.Channel);
                     var json = message.Content.ToString();
-                    var manifest = JsonSerializer.Deserialize<RoomAppManifest>(json);
-                    if (manifest != null)
+                    var announcement = JsonSerializer.Deserialize<RoomAppAnnouncementMessage>(json);
+                    if (announcement != null)
                     {
-                        var connection = Connections.FirstOrDefault(x => x.Manifest.Id == manifest.Id);
-                        var capable = Capabilities.Any(x => manifest.Capabilities.Contains(x));
-                        if (connection == null && capable)
+                        var capable = Capabilities.Any(x => announcement.Manifest.Capabilities.Contains(x));
+                        if (capable)
                         {
-                            connection = new RoomAppConnection { Manifest = manifest, Channel = message.Channel };
-                            Connections = Connections.Add(connection);
-                            ConnectionChanged?.Invoke(this, connection);
-                        }
-                        else if (connection?.Channel == message.Channel && capable)
-                        {
-                            connection.Manifest = manifest;
-                            ConnectionChanged?.Invoke(this, connection);
+                            if (connection == null)
+                            {
+                                connection = new RoomAppConnection { Manifest = announcement.Manifest, Channel = message.Channel };
+                                Connections = Connections.Add(connection);
+                                ConnectionChanged?.Invoke(this, connection);
+                                if (Behavior == RoomAppBehavior.DiscoverFirst) await AnnounceApp(message.Channel);
+                            }
+                            else if (connection != null)
+                            {
+                                connection.Manifest = announcement.Manifest;
+                                ConnectionChanged?.Invoke(this, connection);
+                            }
                         }
                         else if (connection != null)
                         {
@@ -79,21 +88,23 @@ namespace KolibSoft.RoomApp.Core
                         }
                     }
                 }
-                else if (message.Verb == RoomAppVerbs.AppDiscovering)
+                else if (message.Verb == RoomAppVerbs.AppDiscovering && message.Content.Length > 0)
                 {
-                    if (Behavior.HasFlag(RoomAppBehavior.Announce))
+                    var connection = Connections.FirstOrDefault(x => x.Channel == message.Channel);
+                    if (connection != null || Behavior == RoomAppBehavior.AnnounceFirst)
                     {
                         var json = message.Content.ToString();
-                        var capabilities = JsonSerializer.Deserialize<string[]>(json);
-                        if (capabilities != null && Manifest.Capabilities.Any(x => capabilities.Contains(x)))
-                        {
+                        var discovering = JsonSerializer.Deserialize<RoomAppDiscoveringMessage>(json);
+                        if (discovering != null && Manifest.Capabilities.Any(x => discovering.Capabilities.Contains(x)))
                             await AnnounceApp(message.Channel);
-                            if (Behavior.HasFlag(RoomAppBehavior.Discover)) await DiscoverApp(message.Channel);
-                        }
                     }
                 }
             }
-            catch { }
+            catch (Exception e)
+            {
+                var wrtier = LogWriter;
+                if (wrtier != null) await wrtier.WriteLineAsync($"Room App Service exception: {e.Message}\n{e.StackTrace}");
+            }
         }
 
         protected override void OnDisconnect(IRoomSocket socket)

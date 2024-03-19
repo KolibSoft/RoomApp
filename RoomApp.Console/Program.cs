@@ -6,6 +6,32 @@ using KolibSoft.Rooms.Core;
 
 namespace KolibSoft.Rooms.Console;
 
+public class Service : RoomAppService
+{
+
+    protected override void OnConnect(IRoomSocket socket)
+    {
+        base.OnConnect(socket);
+        System.Console.WriteLine("Service Online");
+    }
+
+    protected override void OnDisconnect(IRoomSocket socket)
+    {
+        base.OnDisconnect(socket);
+        System.Console.WriteLine("Service Offline");
+    }
+
+    public Service(RoomAppManifest manifest, string[] capabilities) : base(manifest, capabilities)
+    {
+        ConnectionChanged += (s, e) =>
+        {
+            if (Connections.Contains(e)) System.Console.WriteLine($"Connection online: {e.Manifest.Name}");
+            else System.Console.WriteLine($"Connection offline: {e.Manifest.Name}");
+        };
+    }
+
+}
+
 public static class Program
 {
 
@@ -57,6 +83,7 @@ public static class Program
         var name = args.GetArgument("--name", null, "Room App");
         var server = args.GetArgument("--server");
         var impl = args.GetOption("--impl", ["TCP", "WEB"]);
+        var behavior = args.GetOption("--behavior", ["Manual", "AnnounceFirst", "DiscoverFirst"]);
         var appCaps = args.GetArgument("--appCaps").Split(",");
         var conCaps = args.GetArgument("--conCaps").Split(",");
         var manifest = new RoomAppManifest
@@ -65,7 +92,14 @@ public static class Program
             Name = name,
             Capabilities = appCaps
         };
-        var service = new RoomAppService(manifest, conCaps);
+        var service = new Service(manifest, conCaps);
+        service.Behavior = behavior switch
+        {
+            "AnnounceFirst" => RoomAppBehavior.AnnounceFirst,
+            "DiscoverFirst" => RoomAppBehavior.DiscoverFirst,
+            _ => RoomAppBehavior.Manual
+        };
+        service.LogWriter = System.Console.Out;
         await service.ConnectAsync(server, impl);
         while (service.Status == RoomServiceStatus.Online) await Task.Delay(100);
     }
