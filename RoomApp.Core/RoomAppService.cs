@@ -8,16 +8,43 @@ using KolibSoft.Rooms.Core;
 
 namespace KolibSoft.RoomApp.Core
 {
+
+    /// <summary>
+    /// Room App Service.
+    /// </summary>
     public class RoomAppService : RoomService
     {
 
+        /// <summary>
+        /// App manifest for the current service.
+        /// </summary>
         public RoomAppManifest Manifest { get; set; }
+
+        /// <summary>
+        /// Requested capabilities for other room apps.
+        /// </summary>
         public string[] Capabilities { get; set; }
+
+        /// <summary>
+        /// App behavior to announce and discover apps.
+        /// </summary>
         public RoomAppBehavior Behavior { get; set; } = RoomAppBehavior.DiscoverFirst;
+
+        /// <summary>
+        /// Available room app connections in the room.
+        /// </summary>
         public ImmutableArray<RoomAppConnection> Connections { get; private set; } = ImmutableArray.Create<RoomAppConnection>();
 
+        /// <summary>
+        /// Connection changed event.
+        /// </summary>
         public event EventHandler<RoomAppConnection>? ConnectionChanged;
 
+        /// <summary>
+        /// Announce this app using the specified channel (using Broadcast channel if no specified).
+        /// </summary>
+        /// <param name="channel">Room channel to use.</param>
+        /// <returns></returns>
         public async Task AnnounceApp(RoomChannel? channel = null)
         {
             var json = JsonSerializer.Serialize(new RoomAppAnnouncementMessage
@@ -32,6 +59,11 @@ namespace KolibSoft.RoomApp.Core
             });
         }
 
+        /// <summary>
+        /// Attempts to discover other app in the room using the specified channel (using Broadcast channel if no specified).
+        /// </summary>
+        /// <param name="channel">Room channel to use.</param>
+        /// <returns></returns>
         public async Task DiscoverApp(RoomChannel? channel = null)
         {
             var json = JsonSerializer.Serialize(new RoomAppDiscoveringMessage
@@ -113,6 +145,11 @@ namespace KolibSoft.RoomApp.Core
             Connections = Connections.Clear();
         }
 
+        /// <summary>
+        /// Constructs a new Room App Service with the specified app manifest and the requested room apps capabilities.
+        /// </summary>
+        /// <param name="manifest">This app manifest.</param>
+        /// <param name="capabilities">Requested other apps caoabpilities.</param>
         public RoomAppService(RoomAppManifest manifest, string[] capabilities)
         {
             Manifest = manifest;

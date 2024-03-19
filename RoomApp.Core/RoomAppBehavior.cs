@@ -3,7 +3,9 @@ using System;
 namespace KolibSoft.RoomApp.Core
 {
 
-    [Flags]
+    /// <summary>
+    /// Room App behavior.
+    /// </summary>
     public enum RoomAppBehavior
     {
         Manual,
