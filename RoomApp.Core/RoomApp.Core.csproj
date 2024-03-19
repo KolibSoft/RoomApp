@@ -8,7 +8,7 @@
   <PropertyGroup>
     <PackageId>KolibSoft.RoomApp.Core</PackageId>
     <AssemblyName>KolibSoft.RoomApp.Core</AssemblyName>
-    <PackageVersion>1.1.0</PackageVersion>
+    <PackageVersion>1.1.1</PackageVersion>
     <Authors>Kolib Software</Authors>
     <Copyright>Kolib Software</Copyright>
     <RepositoryUrl>https://github.com/KolibSoft/RoomApp</RepositoryUrl>
@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="KolibSoft.Rooms.Core" Version="1.4.1" />
+    <PackageReference Include="KolibSoft.Rooms.Core" Version="1.4.2" />
   </ItemGroup>
 
 </Project>
