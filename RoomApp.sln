@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RoomApp.Core", "RoomApp.Core\RoomApp.Core.csproj", "{FFF35349-CE0A-4F46-85BB-9F154F6D4809}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RoomApp.Console", "RoomApp.Console\RoomApp.Console.csproj", "{B9DCC9CC-3352-4EA3-9983-20B2A623D0FB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FFF35349-CE0A-4F46-85BB-9F154F6D4809}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FFF35349-CE0A-4F46-85BB-9F154F6D4809}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FFF35349-CE0A-4F46-85BB-9F154F6D4809}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FFF35349-CE0A-4F46-85BB-9F154F6D4809}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9DCC9CC-3352-4EA3-9983-20B2A623D0FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9DCC9CC-3352-4EA3-9983-20B2A623D0FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9DCC9CC-3352-4EA3-9983-20B2A623D0FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9DCC9CC-3352-4EA3-9983-20B2A623D0FB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
