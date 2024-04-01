@@ -43,11 +43,11 @@ namespace KolibSoft.RoomApp.Core
         public event EventHandler<RoomAppConnection>? ConnectionChanged;
 
         /// <summary>
-        /// Announce this app using the specified channel (using Broadcast channel if no specified).
+        /// Announce this app using the specified channel.
         /// </summary>
         /// <param name="channel">Room channel to use.</param>
         /// <returns></returns>
-        public async Task AnnounceApp(RoomChannel? channel = null)
+        public async Task AnnounceApp(RoomChannel channel)
         {
             var json = JsonSerializer.Serialize(new RoomAppAnnouncementMessage
             {
@@ -56,17 +56,23 @@ namespace KolibSoft.RoomApp.Core
             await SendAsync(new RoomMessage
             {
                 Verb = RoomAppVerbs.AppAnnouncement,
-                Channel = channel ?? RoomChannel.Broadcast,
+                Channel = channel,
                 Content = RoomContent.Create(json)
             });
         }
 
         /// <summary>
-        /// Attempts to discover other app in the room using the specified channel (using Broadcast channel if no specified).
+        /// Announce this app using the Broadcast channel.
+        /// </summary>
+        /// <returns></returns>
+        public async Task AnnounceApp() => await AnnounceApp(RoomChannel.Broadcast);
+
+        /// <summary>
+        /// Attempts to discover other app in the room using the specified channel.
         /// </summary>
         /// <param name="channel">Room channel to use.</param>
         /// <returns></returns>
-        public async Task DiscoverApp(RoomChannel? channel = null)
+        public async Task DiscoverApp(RoomChannel channel)
         {
             var json = JsonSerializer.Serialize(new RoomAppDiscoveringMessage
             {
@@ -75,10 +81,16 @@ namespace KolibSoft.RoomApp.Core
             await SendAsync(new RoomMessage
             {
                 Verb = RoomAppVerbs.AppDiscovering,
-                Channel = channel ?? RoomChannel.Broadcast,
+                Channel = channel,
                 Content = RoomContent.Create(json)
             });
         }
+
+        /// <summary>
+        /// Attempts to discover other app in the room using the Broadcast channel.
+        /// </summary>
+        /// <returns></returns>
+        public async Task DiscoverApp() => await DiscoverApp(RoomChannel.Broadcast);
 
         protected override void OnOnline(IRoomSocket socket)
         {

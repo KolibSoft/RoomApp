@@ -27,18 +27,18 @@ public class Serice : RoomAppService
 
     protected override void OnMessageReceived(RoomMessage message)
     {
-        base.OnMessageReceived(message);
         System.Console.SetCursorPosition(0, System.Console.CursorTop);
         System.Console.WriteLine($"{message.Verb} [{message.Channel}] {message.Content}");
         System.Console.Write("> ");
+        base.OnMessageReceived(message);
     }
 
     protected override void OnMessageSent(RoomMessage message)
     {
-        base.OnMessageSent(message);
         System.Console.SetCursorPosition(0, System.Console.CursorTop);
         System.Console.WriteLine($"{message.Verb} [{message.Channel}] {message.Content}");
         System.Console.Write("> ");
+        base.OnMessageSent(message);
     }
 
     public Serice(RoomAppManifest manifest, string[] capabilities) : base(manifest, capabilities) { }
@@ -50,7 +50,8 @@ public static class Program
 
     public static string? Prompt(string? hint = "> ")
     {
-        System.Console.Write(hint);
+        System.Console.SetCursorPosition(0, System.Console.CursorTop);
+        System.Console.Write("> ");
         var input = System.Console.ReadLine();
         return input;
     }
@@ -183,11 +184,15 @@ public static class Program
         {
             try
             {
-                var command = Prompt("> ");
+                var command = Prompt();
                 switch (command)
                 {
                     case "discover": await service.DiscoverApp(); break;
                     case "announce": await service.AnnounceApp(); break;
+                    case "connections":
+                        foreach (var connection in service.Connections)
+                            System.Console.WriteLine($"{connection.Manifest.Name} [{connection.Channel}]");
+                        break;
                 }
             }
             catch (Exception error)
