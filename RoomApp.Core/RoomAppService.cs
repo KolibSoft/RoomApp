@@ -4,7 +4,9 @@ using System.Linq;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
-using KolibSoft.Rooms.Core;
+using KolibSoft.Rooms.Core.Protocol;
+using KolibSoft.Rooms.Core.Services;
+using KolibSoft.Rooms.Core.Sockets;
 
 namespace KolibSoft.RoomApp.Core
 {
@@ -55,7 +57,7 @@ namespace KolibSoft.RoomApp.Core
             {
                 Verb = RoomAppVerbs.AppAnnouncement,
                 Channel = channel ?? RoomChannel.Broadcast,
-                Content = RoomContent.Parse(json)
+                Content = RoomContent.Create(json)
             });
         }
 
@@ -74,15 +76,15 @@ namespace KolibSoft.RoomApp.Core
             {
                 Verb = RoomAppVerbs.AppDiscovering,
                 Channel = channel ?? RoomChannel.Broadcast,
-                Content = RoomContent.Parse(json)
+                Content = RoomContent.Create(json)
             });
             await Task.Delay(100);
         }
 
-        protected override void OnConnect(IRoomSocket socket)
+        protected override void OnOnline(IRoomSocket socket)
         {
-            base.OnConnect(socket);
-            Connections = Connections.Clear();
+            base.OnOnline(socket);
+            if (Socket == socket) Connections = Connections.Clear();
         }
 
         protected override async void OnMessageReceived(RoomMessage message)
@@ -134,15 +136,14 @@ namespace KolibSoft.RoomApp.Core
             }
             catch (Exception e)
             {
-                var wrtier = LogWriter;
-                if (wrtier != null) await wrtier.WriteLineAsync($"Room App Service exception: {e.Message}\n{e.StackTrace}");
+                if (Logger != null) await Logger.WriteLineAsync($"Room App Service exception: {e.Message}\n{e.StackTrace}");
             }
         }
 
-        protected override void OnDisconnect(IRoomSocket socket)
+        protected override void OnOffline(IRoomSocket socket)
         {
-            base.OnDisconnect(socket);
-            Connections = Connections.Clear();
+            base.OnOffline(socket);
+            if (Socket == socket) Connections = Connections.Clear();
         }
 
         /// <summary>

@@ -1,107 +1,200 @@
-﻿using System.Net;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Text.Json;
 using KolibSoft.RoomApp.Core;
-using KolibSoft.Rooms.Core;
+using KolibSoft.Rooms.Core.Protocol;
+using KolibSoft.Rooms.Core.Services;
+using KolibSoft.Rooms.Core.Sockets;
 
-namespace KolibSoft.Rooms.Console;
+namespace KolibSoft.RoomApp.Console;
 
-public class Service : RoomAppService
+public class Serice : RoomAppService
 {
 
-    protected override void OnConnect(IRoomSocket socket)
+    protected override void OnOnline(IRoomSocket socket)
     {
-        base.OnConnect(socket);
-        System.Console.WriteLine("Service Online");
+        base.OnOnline(socket);
+        System.Console.WriteLine("Service is online");
     }
 
-    protected override void OnDisconnect(IRoomSocket socket)
+    protected override void OnOffline(IRoomSocket socket)
     {
-        base.OnDisconnect(socket);
-        System.Console.WriteLine("Service Offline");
+        base.OnOnline(socket);
+        System.Console.WriteLine("Service is offline");
     }
 
-    public Service(RoomAppManifest manifest, string[] capabilities) : base(manifest, capabilities)
+    protected override void OnMessageReceived(RoomMessage message)
     {
-        ConnectionChanged += (s, e) =>
-        {
-            if (Connections.Contains(e)) System.Console.WriteLine($"Connection online: {e.Manifest.Name}");
-            else System.Console.WriteLine($"Connection offline: {e.Manifest.Name}");
-        };
+        base.OnMessageReceived(message);
+        System.Console.SetCursorPosition(0, System.Console.CursorTop);
+        System.Console.WriteLine($"{message.Verb} [{message.Channel}] {message.Content}");
+        System.Console.Write("> ");
     }
+
+    protected override void OnMessageSent(RoomMessage message)
+    {
+        base.OnMessageSent(message);
+        System.Console.SetCursorPosition(0, System.Console.CursorTop);
+        System.Console.WriteLine($"{message.Verb} [{message.Channel}] {message.Content}");
+        System.Console.Write("> ");
+    }
+
+    public Serice(RoomAppManifest manifest, string[] capabilities) : base(manifest, capabilities) { }
 
 }
 
 public static class Program
 {
 
-    public static string? Prompt(string hint)
+    public static string? Prompt(string? hint = "> ")
     {
         System.Console.Write(hint);
         var input = System.Console.ReadLine();
         return input;
     }
 
-    public static string GetArgument(this string[] args, string name, string? hint = null, string? def = null)
+    public static string? GetArgument(this string[] args, string name, string? hint = null, bool required = false)
     {
-        var arg = args.FirstOrDefault(x => x.StartsWith(name));
-        if (arg != null)
+        var argName = $"--{name}";
+        string? argument = args.FirstOrDefault(x => x.StartsWith(argName) && (x.Length == argName.Length || x[argName.Length] == '='));
+        if (argument != null)
         {
-            if (arg.Length == name.Length) return arg;
-            if (arg[name.Length] == '=') return arg.Substring(name.Length + 1);
+            if (argument.Length == argName.Length) return name;
+            if (argument[argName.Length] == '=') return argument[(argName.Length + 1)..];
         }
-        string? input = null;
-        while (input == null) input = Prompt(hint ?? $"{name}: ") ?? def;
-        return input;
+        while (required && string.IsNullOrWhiteSpace(argument)) argument = Prompt(hint ?? $"{name}: ");
+        return argument;
     }
 
-    public static int EnsureInteger(Func<string> func, int min = int.MinValue, int max = int.MaxValue)
+    public static string? GetOption(this string[] args, string name, string[] options, string? hint = null, bool required = false)
     {
-        if (max < min)
-            throw new ArgumentException("Min value and max value overlaps");
-        while (true) if (int.TryParse(func(), out int integer) && integer >= min && integer <= max) return integer;
+        string? option = args.GetArgument(name, hint, required);
+        while (required && !options.Contains(option)) option = Prompt(hint ?? $"{name}: ");
+        return option;
     }
 
-    public static Uri EnsureUri(Func<string> func)
+    public static int? GetInteger(this string[] args, string name, string? hint = null, bool required = false)
     {
-        while (true) if (Uri.TryCreate(func(), UriKind.RelativeOrAbsolute, out Uri? uri)) return uri;
+        bool parsed;
+        int integer;
+        while (!(parsed = int.TryParse(args.GetArgument(name, hint, required), out integer)) && required) continue;
+        return parsed ? integer : null;
     }
 
-    public static string GetOption(this string[] args, string name, string[] options, string? hint = null)
+    public static IPEndPoint? GetIPEndpoint(this string[] args, string name, string? hint = null, bool required = false)
     {
-        if (!options.Any())
-            throw new ArgumentException("Options can not be empty");
-        while (true)
+        IPEndPoint? endpoint;
+        while (!IPEndPoint.TryParse(args.GetArgument(name, hint, required)!, out endpoint) && required) continue;
+        return endpoint;
+    }
+
+    public static Uri? GetUri(this string[] args, string name, string? hint = null, bool required = false)
+    {
+        Uri? uri;
+        while (!TryParse(args.GetArgument(name, hint, required)!, out uri) && required) continue;
+        return uri;
+        static bool TryParse(string value, [NotNullWhen(true)] out Uri? uri)
         {
-            var input = args.GetArgument(name, hint, null);
-            if (options.Contains(input)) return input;
+            try
+            {
+                uri = new Uri(value);
+                return true;
+            }
+            catch
+            {
+                uri = null;
+                return false;
+            }
+        }
+    }
+
+    public static string[]? GetArray(this string[] args, string name, string? hint = null, bool required = false)
+    {
+        string[]? array;
+        while (!TryParse(args.GetArgument(name, hint, required)!, out array) && required) continue;
+        return array;
+        static bool TryParse(string value, [NotNullWhen(true)] out string[]? array)
+        {
+            try
+            {
+                array = value.Split(",");
+                return true;
+            }
+            catch
+            {
+                array = null;
+                return false;
+            }
         }
     }
 
     public static async Task Main(params string[] args)
     {
-        var name = args.GetArgument("--name", null, "Room App");
-        var server = args.GetArgument("--server");
-        var impl = args.GetOption("--impl", ["TCP", "WEB"]);
-        var behavior = args.GetOption("--behavior", ["Manual", "AnnounceFirst", "DiscoverFirst"]);
-        var appCaps = args.GetArgument("--appCaps").Split(",");
-        var conCaps = args.GetArgument("--conCaps").Split(",");
+        var buffering = args.GetInteger("buff") ?? 1024;
+        var rating = args.GetInteger("rate") ?? 1024;
+        var impl = args.GetOption("impl", ["TCP", "WEB"], null, true);
+        var behavior = (args.GetOption("behavior", ["Manual", "DiscoverFirst", "AnnounceFirst"], null, false) ?? "DiscoverFirst") switch
+        {
+            "DiscoverFirst" => RoomAppBehavior.DiscoverFirst,
+            "AnnounceFirst" => RoomAppBehavior.AnnounceFirst,
+            _ => RoomAppBehavior.Manual
+        };
         var manifest = new RoomAppManifest
         {
             Id = Guid.NewGuid(),
-            Name = name,
-            Capabilities = appCaps
+            Name = args.GetArgument("name", null, false) ?? $"App {Random.Shared.Next():x8}",
+            Capabilities = args.GetArray("appCaps", null, false) ?? []
         };
-        var service = new Service(manifest, conCaps);
-        service.Behavior = behavior switch
+        var capabilities = args.GetArray("connCaps", null, false) ?? [];
+        if (impl == "TCP")
         {
-            "AnnounceFirst" => RoomAppBehavior.AnnounceFirst,
-            "DiscoverFirst" => RoomAppBehavior.DiscoverFirst,
-            _ => RoomAppBehavior.Manual
-        };
-        service.LogWriter = System.Console.Out;
-        await service.ConnectAsync(server, impl);
-        while (service.Status == RoomServiceStatus.Online) await Task.Delay(100);
+            var server = args.GetArgument("server") ?? "127.0.0.1:55000";
+            System.Console.WriteLine($"Using server: {server}");
+            var service = new Serice(manifest, capabilities)
+            {
+                Logger = System.Console.Error,
+                Behavior = behavior
+            };
+            await service.ConnectAsync(server, RoomService.TCP, rating);
+            await CommandAsync(service);
+        }
+        else if (impl == "WEB")
+        {
+            var server = args.GetArgument("server") ?? "ws://localhost:55000/";
+            System.Console.WriteLine($"Using server: {server}");
+            var service = new Serice(manifest, capabilities)
+            {
+                Logger = System.Console.Error,
+                Behavior = behavior
+            };
+            await service.ConnectAsync(server, RoomService.WEB, rating);
+            await CommandAsync(service);
+        }
+        await Task.Delay(100);
+        System.Console.Write($"Press a key to exit...");
+        System.Console.ReadKey();
+    }
+
+    public static async Task CommandAsync(RoomAppService service)
+    {
+        while (service.IsOnline)
+        {
+            try
+            {
+                var command = Prompt("> ");
+                switch (command)
+                {
+                    case "discover": await service.DiscoverApp(); break;
+                    case "announce": await service.AnnounceApp(); break;
+                }
+            }
+            catch (Exception error)
+            {
+                if (service.Logger != null) await service.Logger.WriteLineAsync($"Room App error: {error}");
+            }
+        }
     }
 
 }

@@ -1,4 +1,5 @@
 using KolibSoft.Rooms.Core;
+using KolibSoft.Rooms.Core.Protocol;
 
 namespace KolibSoft.RoomApp.Core
 {
