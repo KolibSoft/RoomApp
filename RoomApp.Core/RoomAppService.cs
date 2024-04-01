@@ -78,7 +78,6 @@ namespace KolibSoft.RoomApp.Core
                 Channel = channel ?? RoomChannel.Broadcast,
                 Content = RoomContent.Create(json)
             });
-            await Task.Delay(100);
         }
 
         protected override void OnOnline(IRoomSocket socket)
@@ -136,7 +135,7 @@ namespace KolibSoft.RoomApp.Core
             }
             catch (Exception e)
             {
-                if (Logger != null) await Logger.WriteLineAsync($"Room App Service exception: {e.Message}\n{e.StackTrace}");
+                if (Logger != null) await Logger.WriteLineAsync($"Room App Service error: {e.Message}\n{e.StackTrace}");
             }
         }
 
