@@ -3,10 +3,11 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using KolibSoft.Rooms.Core.Protocol;
 using KolibSoft.Rooms.Core.Services;
-using KolibSoft.Rooms.Core.Sockets;
+using KolibSoft.Rooms.Core.Streams;
 
 namespace KolibSoft.RoomApp.Core
 {
@@ -17,97 +18,20 @@ namespace KolibSoft.RoomApp.Core
     public class RoomAppService : RoomService
     {
 
-        /// <summary>
-        /// App manifest for the current service.
-        /// </summary>
         public RoomAppManifest Manifest { get; set; }
-
-        /// <summary>
-        /// Requested capabilities for other room apps.
-        /// </summary>
         public string[] Capabilities { get; set; }
-
-        /// <summary>
-        /// App behavior to announce and discover apps.
-        /// </summary>
         public RoomAppBehavior Behavior { get; set; } = RoomAppBehavior.DiscoverFirst;
-
-        /// <summary>
-        /// Available room app connections in the room.
-        /// </summary>
         public ImmutableArray<RoomAppConnection> Connections { get; private set; } = ImmutableArray.Create<RoomAppConnection>();
-
-        /// <summary>
-        /// Connection changed event.
-        /// </summary>
         public event EventHandler<RoomAppConnection>? ConnectionChanged;
 
-        /// <summary>
-        /// Announce this app using the specified channel.
-        /// </summary>
-        /// <param name="channel">Room channel to use.</param>
-        /// <returns></returns>
-        public async Task AnnounceApp(RoomChannel channel)
+        protected override async ValueTask OnReceiveAsync(IRoomStream stream, RoomMessage message, CancellationToken token)
         {
-            var json = JsonSerializer.Serialize(new RoomAppAnnouncementMessage
-            {
-                Manifest = Manifest
-            });
-            await SendAsync(new RoomMessage
-            {
-                Verb = RoomAppVerbs.AppAnnouncement,
-                Channel = channel,
-                Content = RoomContent.Create(json)
-            });
-        }
-
-        /// <summary>
-        /// Announce this app using the Broadcast channel.
-        /// </summary>
-        /// <returns></returns>
-        public async Task AnnounceApp() => await AnnounceApp(RoomChannel.Broadcast);
-
-        /// <summary>
-        /// Attempts to discover other app in the room using the specified channel.
-        /// </summary>
-        /// <param name="channel">Room channel to use.</param>
-        /// <returns></returns>
-        public async Task DiscoverApp(RoomChannel channel)
-        {
-            var json = JsonSerializer.Serialize(new RoomAppDiscoveringMessage
-            {
-                Capabilities = Capabilities
-            });
-            await SendAsync(new RoomMessage
-            {
-                Verb = RoomAppVerbs.AppDiscovering,
-                Channel = channel,
-                Content = RoomContent.Create(json)
-            });
-        }
-
-        /// <summary>
-        /// Attempts to discover other app in the room using the Broadcast channel.
-        /// </summary>
-        /// <returns></returns>
-        public async Task DiscoverApp() => await DiscoverApp(RoomChannel.Broadcast);
-
-        protected override void OnOnline(IRoomSocket socket)
-        {
-            base.OnOnline(socket);
-            if (Socket == socket) Connections = Connections.Clear();
-        }
-
-        protected override async void OnMessageReceived(RoomMessage message)
-        {
-            base.OnMessageReceived(message);
             try
             {
                 if (message.Verb == RoomAppVerbs.AppAnnouncement && message.Content.Length > 0)
                 {
                     var connection = Connections.FirstOrDefault(x => x.Channel == message.Channel);
-                    var json = message.Content.ToString();
-                    var announcement = JsonSerializer.Deserialize<RoomAppAnnouncementMessage>(json);
+                    var announcement = await message.Content.ReadAsJsonAsync<AnnouncementMessage>(token: token);
                     if (announcement != null)
                     {
                         var capable = Capabilities.Any(x => announcement.Manifest.Capabilities.Contains(x));
@@ -118,7 +42,7 @@ namespace KolibSoft.RoomApp.Core
                                 connection = new RoomAppConnection { Manifest = announcement.Manifest, Channel = message.Channel };
                                 Connections = Connections.Add(connection);
                                 ConnectionChanged?.Invoke(this, connection);
-                                if (Behavior == RoomAppBehavior.DiscoverFirst) await AnnounceApp(message.Channel);
+                                if (Behavior == RoomAppBehavior.DiscoverFirst) AnnounceApp(message.Channel);
                             }
                             else if (connection != null)
                             {
@@ -139,33 +63,74 @@ namespace KolibSoft.RoomApp.Core
                     if (connection != null || Behavior == RoomAppBehavior.AnnounceFirst)
                     {
                         var json = message.Content.ToString();
-                        var discovering = JsonSerializer.Deserialize<RoomAppDiscoveringMessage>(json);
+                        var discovering = await message.Content.ReadAsJsonAsync<DiscoveringMessage>(token: token);
                         if (discovering != null && Manifest.Capabilities.Any(x => discovering.Capabilities.Contains(x)))
-                            await AnnounceApp(message.Channel);
+                            AnnounceApp(message.Channel);
                     }
                 }
             }
-            catch (Exception e)
+            catch (Exception error)
             {
-                if (Logger != null) await Logger.WriteLineAsync($"Room App Service error: {e.Message}\n{e.StackTrace}");
+                Logger?.Invoke($"Room App Service error: {error}");
             }
         }
 
-        protected override void OnOffline(IRoomSocket socket)
+        public override async ValueTask ListenAsync(IRoomStream stream, CancellationToken token = default)
         {
-            base.OnOffline(socket);
-            if (Socket == socket) Connections = Connections.Clear();
+            if (_stream != null) throw new InvalidOperationException("Stream already listening");
+            _stream = stream;
+            await base.ListenAsync(stream, token);
+            _stream = null;
         }
 
-        /// <summary>
-        /// Constructs a new Room App Service with the specified app manifest and the requested room apps capabilities.
-        /// </summary>
-        /// <param name="manifest">This app manifest.</param>
-        /// <param name="capabilities">Requested other apps caoabpilities.</param>
+        public override void Enqueue(IRoomStream stream, RoomMessage message)
+        {
+            if (_stream == stream) throw new InvalidOperationException("Stream already listening");
+            base.Enqueue(stream, message);
+        }
+
+        public void Send(RoomMessage message)
+        {
+            if (_stream == null) throw new InvalidOperationException("Stream not listening");
+            Enqueue(_stream, message);
+        }
+
+        public async void AnnounceApp(int channel = -1)
+        {
+            Send(new RoomMessage
+            {
+                Verb = RoomAppVerbs.AppAnnouncement,
+                Channel = channel,
+                Content = await RoomContentUtils.CreateAsJsonAsync(new AnnouncementMessage { Manifest = Manifest })
+            });
+        }
+
+        public async void DiscoverApp(int channel = -1)
+        {
+            Send(new RoomMessage
+            {
+                Verb = RoomAppVerbs.AppDiscovering,
+                Channel = channel,
+                Content = await RoomContentUtils.CreateAsJsonAsync(new DiscoveringMessage { Capabilities = Capabilities })
+            });
+        }
+
         public RoomAppService(RoomAppManifest manifest, string[] capabilities)
         {
             Manifest = manifest;
             Capabilities = capabilities;
+        }
+
+        private IRoomStream? _stream;
+
+        private class AnnouncementMessage
+        {
+            public RoomAppManifest Manifest { get; set; } = new RoomAppManifest();
+        }
+
+        public class DiscoveringMessage
+        {
+            public string[] Capabilities { get; set; } = Array.Empty<string>();
         }
 
     }

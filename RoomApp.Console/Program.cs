@@ -2,46 +2,46 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Text.Json;
 using KolibSoft.RoomApp.Core;
 using KolibSoft.Rooms.Core.Protocol;
-using KolibSoft.Rooms.Core.Services;
-using KolibSoft.Rooms.Core.Sockets;
+using KolibSoft.Rooms.Core.Streams;
 
 namespace KolibSoft.RoomApp.Console;
 
-public class Serice : RoomAppService
+public class Service : RoomAppService
 {
 
-    protected override void OnOnline(IRoomSocket socket)
+    protected override async ValueTask OnReceiveAsync(IRoomStream stream, RoomMessage message, CancellationToken token)
     {
-        base.OnOnline(socket);
-        System.Console.WriteLine("Service is online");
+        var clone = new MemoryStream();
+        await message.Content.CopyToAsync(clone, token);
+        message.Content.Seek(0, SeekOrigin.Begin);
+        System.Console.WriteLine($"[{message.Channel}] {message.Verb}: {message.Content}");
+        await base.OnReceiveAsync(stream, message, token);
     }
 
-    protected override void OnOffline(IRoomSocket socket)
+    protected override async ValueTask OnSendAsync(IRoomStream stream, RoomMessage message, CancellationToken token)
     {
-        base.OnOnline(socket);
-        System.Console.WriteLine("Service is offline");
+        var clone = new MemoryStream();
+        await message.Content.CopyToAsync(clone, token);
+        message.Content.Seek(0, SeekOrigin.Begin);
+        System.Console.WriteLine($"[{message.Channel}] {message.Verb}: {message.Content}");
+        await base.OnSendAsync(stream, message, token);
     }
 
-    protected override void OnMessageReceived(RoomMessage message)
+    protected override void OnStart()
     {
-        System.Console.SetCursorPosition(0, System.Console.CursorTop);
-        System.Console.WriteLine($"{message.Verb} [{message.Channel}] {message.Content}");
-        System.Console.Write("> ");
-        base.OnMessageReceived(message);
+        base.OnStart();
+        System.Console.WriteLine("Service started");
     }
 
-    protected override void OnMessageSent(RoomMessage message)
+    protected override void OnStop()
     {
-        System.Console.SetCursorPosition(0, System.Console.CursorTop);
-        System.Console.WriteLine($"{message.Verb} [{message.Channel}] {message.Content}");
-        System.Console.Write("> ");
-        base.OnMessageSent(message);
+        base.OnStop();
+        System.Console.WriteLine("Service stopped");
     }
 
-    public Serice(RoomAppManifest manifest, string[] capabilities) : base(manifest, capabilities) { }
+    public Service(RoomAppManifest manifest, string[] capabilities) : base(manifest, capabilities) { }
 
 }
 
@@ -50,8 +50,6 @@ public static class Program
 
     public static string? Prompt(string? hint = "> ")
     {
-        System.Console.SetCursorPosition(0, System.Console.CursorTop);
-        System.Console.Write("> ");
         var input = System.Console.ReadLine();
         return input;
     }
@@ -153,42 +151,52 @@ public static class Program
         {
             var server = args.GetArgument("server") ?? "127.0.0.1:55000";
             System.Console.WriteLine($"Using server: {server}");
-            var service = new Serice(manifest, capabilities)
+            var service = new Service(manifest, capabilities)
             {
-                Logger = System.Console.Error,
+                Logger = System.Console.Error.WriteLine,
                 Behavior = behavior
             };
-            await service.ConnectAsync(server, RoomService.TCP, rating);
-            await CommandAsync(service);
+            using var client = new TcpClient();
+            await client.ConnectAsync(IPEndPoint.Parse(server));
+            using var stream = new RoomNetworkStream(client);
+            service.Start();
+            CommandAsync(service);
+            await service.ListenAsync(stream);
+            service.Stop();
         }
         else if (impl == "WEB")
         {
             var server = args.GetArgument("server") ?? "ws://localhost:55000/";
             System.Console.WriteLine($"Using server: {server}");
-            var service = new Serice(manifest, capabilities)
+            var service = new Service(manifest, capabilities)
             {
-                Logger = System.Console.Error,
+                Logger = System.Console.Error.WriteLine,
                 Behavior = behavior
             };
-            await service.ConnectAsync(server, RoomService.WEB, rating);
-            await CommandAsync(service);
+            using var client = new ClientWebSocket();
+            await client.ConnectAsync(new Uri(server), default);
+            using var stream = new RoomWebStream(client);
+            service.Start();
+            CommandAsync(service);
+            await service.ListenAsync(stream);
+            service.Stop();
         }
         await Task.Delay(100);
         System.Console.Write($"Press a key to exit...");
         System.Console.ReadKey();
     }
 
-    public static async Task CommandAsync(RoomAppService service)
+    public static async void CommandAsync(RoomAppService service)
     {
-        while (service.IsOnline)
+        while (service.IsRunning)
         {
             try
             {
                 var command = Prompt();
                 switch (command)
                 {
-                    case "discover": await service.DiscoverApp(); break;
-                    case "announce": await service.AnnounceApp(); break;
+                    case "discover": service.DiscoverApp(); break;
+                    case "announce": service.AnnounceApp(); break;
                     case "connections":
                         foreach (var connection in service.Connections)
                             System.Console.WriteLine($"{connection.Manifest.Name} [{connection.Channel}]");
@@ -197,8 +205,9 @@ public static class Program
             }
             catch (Exception error)
             {
-                if (service.Logger != null) await service.Logger.WriteLineAsync($"Room App error: {error}");
+                service.Logger?.Invoke($"Room App error: {error}");
             }
+            await Task.Delay(100);
         }
     }
 
