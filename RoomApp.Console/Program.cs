@@ -16,7 +16,8 @@ public class Service : RoomAppService
         var clone = new MemoryStream();
         await message.Content.CopyToAsync(clone, token);
         message.Content.Seek(0, SeekOrigin.Begin);
-        System.Console.WriteLine($"[{message.Channel}] {message.Verb}: {message.Content}");
+        clone.Seek(0, SeekOrigin.Begin);
+        System.Console.WriteLine($"[{message.Channel}] {message.Verb}: {await clone.ReadAsTextAsync(token: token)}");
         await base.OnReceiveAsync(stream, message, token);
     }
 
@@ -25,7 +26,8 @@ public class Service : RoomAppService
         var clone = new MemoryStream();
         await message.Content.CopyToAsync(clone, token);
         message.Content.Seek(0, SeekOrigin.Begin);
-        System.Console.WriteLine($"[{message.Channel}] {message.Verb}: {message.Content}");
+        clone.Seek(0, SeekOrigin.Begin);
+        System.Console.WriteLine($"[{message.Channel}] {message.Verb}: {await clone.ReadAsTextAsync(token: token)}");
         await base.OnSendAsync(stream, message, token);
     }
 
@@ -159,6 +161,7 @@ public static class Program
             using var client = new TcpClient();
             await client.ConnectAsync(IPEndPoint.Parse(server));
             using var stream = new RoomNetworkStream(client);
+            await HandShake(stream);
             service.Start();
             CommandAsync(service);
             await service.ListenAsync(stream);
@@ -176,6 +179,7 @@ public static class Program
             using var client = new ClientWebSocket();
             await client.ConnectAsync(new Uri(server), default);
             using var stream = new RoomWebStream(client);
+            await HandShake(stream);
             service.Start();
             CommandAsync(service);
             await service.ListenAsync(stream);
@@ -186,13 +190,23 @@ public static class Program
         System.Console.ReadKey();
     }
 
+    public static async Task HandShake(IRoomStream stream)
+    {
+        await stream.WriteMessageAsync(new RoomMessage
+        {
+            Verb = "OPTIONS",
+            Content = await RoomContentUtils.CreateAsJsonAsync(new { })
+        });
+        var message = await stream.ReadMessageAsync();
+    }
+
     public static async void CommandAsync(RoomAppService service)
     {
         while (service.IsRunning)
         {
             try
             {
-                var command = Prompt();
+                var command = await Task.Run(() => System.Console.ReadLine());
                 switch (command)
                 {
                     case "discover": service.DiscoverApp(); break;
@@ -207,7 +221,6 @@ public static class Program
             {
                 service.Logger?.Invoke($"Room App error: {error}");
             }
-            await Task.Delay(100);
         }
     }
 

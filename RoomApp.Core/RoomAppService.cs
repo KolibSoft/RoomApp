@@ -85,7 +85,7 @@ namespace KolibSoft.RoomApp.Core
 
         public override void Enqueue(IRoomStream stream, RoomMessage message)
         {
-            if (_stream == stream) throw new InvalidOperationException("Stream already listening");
+            if (_stream != stream) throw new InvalidOperationException("Stream already listening");
             base.Enqueue(stream, message);
         }
 
